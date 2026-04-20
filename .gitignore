@@ -1,0 +1,19 @@
+# --- ENV (SECRETS) ---
+.env
+.env.*
+
+# --- VIRTUAL ENV ---
+.venv/
+venv/
+
+# --- PYTHON ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- LOGS ---
+*.log
+
+# --- OS ---
+.DS_Store
+Thumbs.db
