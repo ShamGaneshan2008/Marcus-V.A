@@ -1,163 +1,158 @@
-# 🤖 Marcus — AI Voice Assistant
+# 🤖 DedSec — AI Voice Assistant
 
 > A modular, conversational AI voice assistant built with Python — capable of listening, thinking, and speaking back.
+
+---
+
+## 📌 Overview
+
+DedSec is a Python-based AI voice assistant that captures your voice, processes it through a language model, and responds with synthesized speech. Built with modularity in mind, it's designed to be easy to extend with new skills, APIs, and integrations.
+
+---
+
+## ✨ Features
+
+- 🎙️ **Speech Recognition** — Listens to your voice in real time
+- 🧠 **AI-Powered Responses** — Processes queries through an LLM (e.g., Groq / OpenAI)
+- 🔊 **Text-to-Speech Output** — Speaks responses back using TTS
+- 🧩 **Modular Architecture** — Easily plug in new commands and integrations
+- ⚡ **Fast & Lightweight** — Minimal dependencies, runs locally
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Python 3.10+ |
+| Speech Recognition | `SpeechRecognition` / `Whisper` |
+| Language Model | Groq API / OpenAI API |
+| Text-to-Speech | `pyttsx3` / `gTTS` |
+| Audio | `PyAudio` / `playsound` |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-Marcus_V.A/
-├── data/
-│   └── memory.json          # Persistent memory store for conversation context
-├── marcus/
-│   ├── commands/            # Executable command modules
-│   │   ├── files.py         # File system operations
-│   │   ├── system.py        # System-level commands (shutdown, volume, etc.)
-│   │   └── web.py           # Web search and browsing actions
-│   ├── core/                # Core assistant logic
-│   │   ├── ai.py            # AI inference and response generation
-│   │   ├── memory.py        # Memory read/write and context management
-│   │   └── router.py        # Intent routing — directs input to the right command
-│   └── utils/               # Utility helpers
-│       ├── listener.py      # Microphone input and speech-to-text
-│       └── speech.py        # Text-to-speech output
-├── main.py                  # Application entry point
-├── run.py                   # Convenience launcher script
-├── .env                     # Environment variables (API keys, config)
-└── requirements.txt         # Python dependencies
+DedSec/
+├── main.py              # Entry point
+├── listener.py          # Microphone input & speech-to-text
+├── brain.py             # LLM query handler
+├── speaker.py           # Text-to-speech output
+├── commands/            # Modular skill handlers
+│   ├── weather.py
+│   ├── search.py
+│   └── ...
+├── config.py            # API keys & settings
+├── requirements.txt
+└── README.md
 ```
-
----
-
-## ✨ Features
-
-- 🎙️ **Voice Input** — Listens via microphone using real-time speech recognition
-- 🧠 **AI-Powered Responses** — Generates intelligent replies through a configurable AI backend
-- 🔊 **Text-to-Speech Output** — Speaks responses back naturally
-- 🗂️ **File Commands** — Perform file system operations by voice
-- 🌐 **Web Integration** — Search the web or open URLs hands-free
-- 💻 **System Control** — Execute system-level actions via voice
-- 💾 **Persistent Memory** — Retains context across sessions via `memory.json`
-- 🔀 **Intent Router** — Cleanly routes commands to the appropriate module
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- Python 3.9+
-- A working microphone
-- API key for your chosen AI backend (e.g. OpenAI, Anthropic)
-
-### Installation
+### 1. Clone the Repository
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/Marcus_V.A.git
-cd Marcus_V.A
-
-# 2. Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate        # macOS/Linux
-.venv\Scripts\activate           # Windows
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment variables
-cp .env.example .env
-# Edit .env and add your API keys
+git clone https://github.com/ShamGaneshan2008/dedsec-voice-assistant.git
+cd dedsec-voice-assistant
 ```
 
-### Running Marcus
+### 2. Install Dependencies
 
 ```bash
-# Option A — via run.py launcher
-python run.py
+pip install -r requirements.txt
+```
 
-# Option B — directly
+### 3. Set Up Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 4. Run the Assistant
+
+```bash
 python main.py
 ```
 
 ---
 
+## 🎤 Usage
+
+Once running, DedSec will listen for your voice input and respond accordingly.
+
+```
+[DedSec] Listening...
+You: "What's the weather today?"
+[DedSec] "It's currently 28°C and sunny in your area."
+```
+
+Say **"exit"** or **"goodbye"** to shut down the assistant.
+
+---
+
 ## ⚙️ Configuration
 
-All configuration is handled through the `.env` file:
+Edit `config.py` to customize behaviour:
 
-```env
-AI_API_KEY=your_api_key_here
-AI_MODEL=gpt-4o              # or any supported model
-VOICE_LANGUAGE=en-US
-SPEECH_RATE=175
-MEMORY_PATH=data/memory.json
+```python
+WAKE_WORD = "hey dedsec"      # Optional wake word
+TTS_ENGINE = "pyttsx3"        # or "gtts"
+LANGUAGE = "en"
 ```
 
 ---
 
-## 🧩 Module Overview
+## 📦 Requirements
 
-| Module | File | Responsibility |
-|---|---|---|
-| **Listener** | `utils/listener.py` | Captures microphone input, converts speech to text |
-| **Speech** | `utils/speech.py` | Converts text responses to spoken audio output |
-| **AI Core** | `core/ai.py` | Sends prompts to the AI backend, returns responses |
-| **Memory** | `core/memory.py` | Loads and saves conversation history to `memory.json` |
-| **Router** | `core/router.py` | Parses intent and dispatches to the correct command |
-| **Files** | `commands/files.py` | Handles file open, read, search, and management |
-| **System** | `commands/system.py` | Executes OS-level actions (volume, shutdown, apps) |
-| **Web** | `commands/web.py` | Performs web searches and opens URLs in the browser |
+```
+speechrecognition
+pyaudio
+pyttsx3
+groq
+python-dotenv
+requests
+```
 
----
-
-## 📦 Dependencies
-
-Install all dependencies with:
+Install all at once:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Key libraries used (add yours as applicable):
-
-| Library | Purpose |
-|---|---|
-| `speechrecognition` | Microphone input & STT |
-| `pyttsx3` / `gTTS` | Text-to-speech |
-| `openai` / `anthropic` | AI backend |
-| `python-dotenv` | Environment variable management |
-| `pyaudio` | Audio stream handling |
+> **Note:** `PyAudio` may require additional system dependencies.
+> - **Windows:** `pip install pipwin && pipwin install pyaudio`
+> - **Linux:** `sudo apt-get install portaudio19-dev`
+> - **macOS:** `brew install portaudio`
 
 ---
 
-## 🗺️ Roadmap
+## 🔮 Roadmap
 
-- [ ] Wake-word detection ("Hey Marcus")
-- [ ] GUI / system tray interface
-- [ ] Plugin system for third-party commands
-- [ ] Multi-language support
-- [ ] Smart home device integration
+- [ ] Wake word detection
+- [ ] GUI overlay / system tray integration
+- [ ] Local LLM support (Ollama)
+- [ ] Smart home device control
+- [ ] Memory / conversation history
+- [ ] Plugin marketplace
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue first to discuss what you'd like to change.
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m 'Add your feature'`
-4. Push to the branch: `git push origin feature/your-feature`
-5. Open a Pull Request
+Pull requests are welcome. For major changes, please open an issue first to discuss what you'd like to change.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE)
 
 ---
 
-<p align="center">Built with 🐍 Python &nbsp;|&nbsp; Powered by AI &nbsp;|&nbsp; Made to listen</p>
+<p align="center">Built by <a href="https://github.com/ShamGaneshan2008">@ShamGaneshan2008</a></p>
