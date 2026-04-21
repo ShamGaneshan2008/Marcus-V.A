@@ -1,4 +1,6 @@
 import os
+import re
+import threading
 from dotenv import load_dotenv
 from marcus.core.ai import AI
 from marcus.core.router import Router
@@ -6,6 +8,16 @@ from marcus.core.memory import Memory
 from marcus.utils.speech import Speech
 
 load_dotenv()
+
+
+def _speak_fast(speech, text):
+    # 🔥 split into sentences
+    chunks = re.split(r'(?<=[.!?]) +', text)
+
+    for chunk in chunks:
+        if chunk.strip():
+            speech.speak(chunk)
+
 
 def main():
     print("""
@@ -46,17 +58,29 @@ def main():
 
 def _text_fallback_loop(router, speech):
     print("[MARCUS] Text mode active. Type your command. ('quit' to exit)\n")
+
     while True:
         try:
             user_input = input("YOU    > ").strip()
+
             if not user_input:
                 continue
+
             if user_input.lower() in ("quit", "exit", "go dark", "bye", "goodbye"):
                 print("[MARCUS] Going dark. DedSec out.")
                 break
+
             response = router.handle(user_input)
+
             print(f"MARCUS > {response}\n")
-            speech.speak(response)
+
+            # 🔥 ULTRA FAST SPEECH (non-blocking)
+            threading.Thread(
+                target=_speak_fast,
+                args=(speech, response),
+                daemon=True
+            ).start()
+
         except (KeyboardInterrupt, EOFError):
             print("\n[MARCUS] Signal lost. DedSec out.")
             break

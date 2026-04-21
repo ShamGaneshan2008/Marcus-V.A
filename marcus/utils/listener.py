@@ -1,8 +1,10 @@
 import speech_recognition as sr
 import threading
 import time
+import re
 
 WAKE_WORD = "hey marcus"
+
 
 class Listener:
     def __init__(self, router, speech):
@@ -10,15 +12,31 @@ class Listener:
         self.speech = speech
         self.recognizer = sr.Recognizer()
         self.microphone = sr.Microphone()
-        self.is_active = False  # True when in conversation mode after wake word
+        self.is_active = False
+        self.is_speaking = False
 
-        # Tune for responsiveness
-        self.recognizer.pause_threshold = 1.0
-        self.recognizer.energy_threshold = 300
+        # 🔥 tuning
+        self.recognizer.pause_threshold = 0.6
+        self.recognizer.energy_threshold = 150
         self.recognizer.dynamic_energy_threshold = True
 
+    # 🔥 FAST SPEECH FUNCTION
+    def _speak_fast(self, text):
+        import re
+
+        self.is_speaking = True
+
+        chunks = re.split(r'(?<=[.!?]) +', text)
+
+        for chunk in chunks:
+            if not self.is_speaking:
+                break
+            if chunk.strip():
+                self.speech.speak(chunk)
+
+        self.is_speaking = False
+
     def start_wake_word_loop(self):
-        """Main loop: always listening for wake word, then entering conversation mode."""
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=1)
             print("[MARCUS] Ambient noise calibrated. Listening for wake word...")
@@ -34,8 +52,10 @@ class Listener:
                     continue
 
                 if WAKE_WORD in text.lower():
-                    self._enter_conversation_mode()
-                # else: just idle, waiting for wake word
+                    if any(word in text.lower() for word in [
+                        "marcus", "hey marcus", "hey market", "marcusss", "markus"
+                    ]):
+                        self._enter_conversation_mode()
 
             except KeyboardInterrupt:
                 print("\n[MARCUS] Signal lost. DedSec out.")
@@ -45,15 +65,26 @@ class Listener:
                 time.sleep(1)
 
     def _enter_conversation_mode(self):
-        """After wake word detected, listen and respond until silence timeout."""
-        self.speech.speak("Signal acquired. What's the mission?")
+        # 🔥 start speaking (non-blocking)
+        threading.Thread(
+            target=self._speak_fast,
+            args=("Signal acquired. What's the mission?",),
+            daemon=True
+        ).start()
+
         print("[MARCUS] Wake word detected — entering conversation mode.")
 
         idle_rounds = 0
-        max_idle = 3  # after 3 silent rounds, go back to wake word mode
+        max_idle = 3
 
         while idle_rounds < max_idle:
             audio = self._listen_once(timeout=6, phrase_limit=15)
+
+            # 🔥 INTERRUPT HERE
+            if self.is_speaking:
+                print("[MARCUS] Interrupted.")
+                self.is_speaking = False
+                self.speech.stop()
 
             if audio is None:
                 idle_rounds += 1
@@ -65,23 +96,42 @@ class Listener:
                 idle_rounds += 1
                 continue
 
-            # Check if user is ending the session
             if any(word in text.lower() for word in ["goodbye", "bye marcus", "go dark", "disconnect"]):
-                self.speech.speak("Going dark. DedSec out.")
+                threading.Thread(
+                    target=self._speak_fast,
+                    args=("Going dark. DedSec out.",),
+                    daemon=True
+                ).start()
+
                 print("[MARCUS] Session ended. Back to wake word mode.")
                 return
 
-            idle_rounds = 0  # reset idle on valid input
+            idle_rounds = 0
             print(f"[YOU] {text}")
+
+            # 🔥 interrupt BEFORE new response
+            if self.is_speaking:
+                self.is_speaking = False
+                self.speech.stop()
+
             response = self.router.handle(text)
             print(f"[MARCUS] {response}")
-            self.speech.speak(response)
+
+            threading.Thread(
+                target=self._speak_fast,
+                args=(response,),
+                daemon=True
+            ).start()
 
         print("[MARCUS] Session timed out. Back to listening for wake word.")
-        self.speech.speak("Going quiet. Call me when you need me.")
+
+        threading.Thread(
+            target=self._speak_fast,
+            args=("Going quiet. Call me when you need me.",),
+            daemon=True
+        ).start()
 
     def _listen_once(self, timeout=5, phrase_limit=10):
-        """Listen for a single audio chunk."""
         try:
             with self.microphone as source:
                 audio = self.recognizer.listen(
@@ -97,12 +147,19 @@ class Listener:
             return None
 
     def _transcribe(self, audio) -> str | None:
-        """Convert audio to text using Google STT."""
         try:
             text = self.recognizer.recognize_google(audio)
+            print("HEARD:", text)
             return text
         except sr.UnknownValueError:
             return None
         except sr.RequestError as e:
             print(f"[MARCUS] STT service error: {e}")
             return None
+
+    def stop(self):
+        try:
+            import pygame
+            pygame.mixer.music.stop()
+        except:
+            pass

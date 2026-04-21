@@ -1,3 +1,11 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
+VOICE_ID = os.getenv("VOICE_ID")
+
 # ==============================
 # 🎙️ VOICE SETTINGS (TTS)
 # ==============================

@@ -20,7 +20,7 @@ load_dotenv()
 
 API_KEY  = os.getenv("ELEVENLABS_API_KEY", "")
 VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "IRHApOXLvnW57QJPQH2P")  # Josh — deep, clear
-MODEL_ID = "eleven_monolingual_v1"
+MODEL_ID = "eleven_monolingual_v2"
 
 _client = None
 
