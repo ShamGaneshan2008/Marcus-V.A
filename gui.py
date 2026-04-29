@@ -48,7 +48,11 @@ class DedSecGUI:
         self._build_input()
 
         self.glitch_active = False
+        self._is_streaming = False          # lock so only one stream at a time
+        self._cursor_job  = None            # after() handle for blinking cursor
         self.root.after(200, self._boot_sequence)
+
+    # ─── UI construction ────────────────────────────────────────────────────
 
     def _build_titlebar(self):
         bar = tk.Frame(self.root, bg=DEDSEC_GRAY, height=34)
@@ -86,6 +90,8 @@ class DedSecGUI:
         self.output.tag_config("user",   foreground="#FFFFFF")
         self.output.tag_config("error",  foreground=DEDSEC_RED)
         self.output.tag_config("system", foreground="#4AF7A0")
+        # invisible cursor marker used during streaming
+        self.output.tag_config("cursor", foreground=DEDSEC_GREEN, background=DEDSEC_GREEN)
 
     def _build_statusbar(self):
         bar = tk.Frame(self.root, bg=DEDSEC_GRAY, height=20)
@@ -112,10 +118,13 @@ class DedSecGUI:
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
         self.entry.bind("<Return>", self._send)
         self.entry.focus_set()
-        tk.Button(frame, text="▶ SEND", bg=DEDSEC_DIM, fg=DEDSEC_DARK,
-                  activebackground=DEDSEC_GREEN, activeforeground=DEDSEC_DARK,
-                  font=FONT_SMALL, bd=0, padx=10,
-                  command=self._send).pack(side=tk.LEFT, padx=(6, 0), ipady=4)
+        self.send_btn = tk.Button(frame, text="▶ SEND", bg=DEDSEC_DIM, fg=DEDSEC_DARK,
+                                  activebackground=DEDSEC_GREEN, activeforeground=DEDSEC_DARK,
+                                  font=FONT_SMALL, bd=0, padx=10,
+                                  command=self._send)
+        self.send_btn.pack(side=tk.LEFT, padx=(6, 0), ipady=4)
+
+    # ─── Output helpers ─────────────────────────────────────────────────────
 
     def _write(self, text, tag=""):
         self.output.config(state=tk.NORMAL)
@@ -127,6 +136,60 @@ class DedSecGUI:
         self.output.config(state=tk.NORMAL)
         self.output.delete("1.0", tk.END)
         self.output.config(state=tk.DISABLED)
+
+    # ─── Streaming cursor ────────────────────────────────────────────────────
+    # We insert a "▌" marker after the last streamed character and flip its
+    # visibility every 400 ms.  When streaming ends we delete the marker.
+
+    def _start_cursor(self):
+        """Insert blinking cursor block at end of output."""
+        self.output.config(state=tk.NORMAL)
+        self.output.insert(tk.END, "▌", "cursor")
+        self.output.see(tk.END)
+        self.output.config(state=tk.DISABLED)
+        self._cursor_visible = True
+        self._blink_cursor()
+
+    def _blink_cursor(self):
+        if not self._is_streaming:
+            return
+        self.output.config(state=tk.NORMAL)
+        # find and retag the trailing "▌"
+        pos = self.output.search("▌", "1.0", tk.END)
+        if pos:
+            end = f"{pos}+1c"
+            self.output.tag_remove("cursor", pos, end)
+            if self._cursor_visible:
+                self.output.tag_add("dim", pos, end)
+            else:
+                self.output.tag_add("cursor", pos, end)
+            self._cursor_visible = not self._cursor_visible
+        self.output.config(state=tk.DISABLED)
+        self._cursor_job = self.root.after(400, self._blink_cursor)
+
+    def _stop_cursor(self):
+        """Remove blinking cursor marker."""
+        if self._cursor_job:
+            self.root.after_cancel(self._cursor_job)
+            self._cursor_job = None
+        self.output.config(state=tk.NORMAL)
+        pos = self.output.search("▌", "1.0", tk.END)
+        if pos:
+            self.output.delete(pos, f"{pos}+1c")
+        self.output.config(state=tk.DISABLED)
+
+    def _insert_before_cursor(self, chunk, tag="bright"):
+        """Write streamed text just before the trailing cursor marker."""
+        self.output.config(state=tk.NORMAL)
+        pos = self.output.search("▌", "1.0", tk.END)
+        if pos:
+            self.output.insert(pos, chunk, tag)
+        else:
+            self.output.insert(tk.END, chunk, tag)
+        self.output.see(tk.END)
+        self.output.config(state=tk.DISABLED)
+
+    # ─── Boot / status ───────────────────────────────────────────────────────
 
     def _boot_sequence(self):
         def run():
@@ -141,34 +204,82 @@ class DedSecGUI:
         self.status_dot.config(fg=DEDSEC_GREEN)
         self.status_lbl.config(fg=DEDSEC_GREEN, text="ONLINE")
 
+    # ─── Send / stream ───────────────────────────────────────────────────────
+
     def _send(self, event=None):
+        if self._is_streaming:
+            return                      # ignore while Marcus is mid-response
         cmd = self.entry.get().strip()
         if not cmd:
             return
         self.entry.delete(0, tk.END)
         self._write(f"\n> {cmd}\n", "user")
-        threading.Thread(target=self._run_marcus, args=(cmd,), daemon=True).start()
+        threading.Thread(target=self._stream_marcus, args=(cmd,), daemon=True).start()
 
-    def _run_marcus(self, cmd):
-        self.root.after(0, self._write, "[ MARCUS ] Processing...\n", "dim")
+    def _stream_marcus(self, cmd):
+        """
+        Runs main.py with --cmd and streams its stdout to the GUI
+        character-by-character (or whatever chunks the OS gives us).
+
+        main.py must flush each token as it arrives, e.g.:
+            print(token, end="", flush=True)
+
+        If you're using Groq's streaming API, iterate over
+        stream.choices[0].delta.content and print/flush each piece.
+        """
+        self._is_streaming = True
+        self.root.after(0, self.send_btn.config, {"fg": DEDSEC_DIM})   # dim button
+        self.root.after(0, self._write, "\n", "")
+        self.root.after(0, self._start_cursor)
+
+        got_any = False
+        error   = False
+
         try:
             env = os.environ.copy()
             env["MARCUS_GUI"] = "1"
-            result = subprocess.run(
+
+            proc = subprocess.Popen(
                 [sys.executable, "main.py", "--cmd", cmd],
-                capture_output=True, text=True, timeout=30,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=0,              # unbuffered — critical for real-time feel
                 cwd=os.path.dirname(os.path.abspath(__file__)),
                 env=env,
             )
-            response = result.stdout.strip() or result.stderr.strip()
-            if not response:
-                response = "[No response — check main.py accepts --cmd flag]"
+
+            # Stream stdout in small reads so each token appears immediately
+            while True:
+                chunk = proc.stdout.read(1)   # 1 char at a time = smoothest feel
+                if not chunk:
+                    break
+                got_any = True
+                self.root.after(0, self._insert_before_cursor, chunk, "bright")
+
+            proc.wait(timeout=5)
+
+            if not got_any:
+                stderr_out = proc.stderr.read().strip()
+                msg = stderr_out or "[No response — check main.py accepts --cmd flag]"
+                self.root.after(0, self._insert_before_cursor, msg, "error")
+                error = True
+
         except subprocess.TimeoutExpired:
-            response = "[TIMEOUT] Marcus took too long to respond."
+            proc.kill()
+            self.root.after(0, self._insert_before_cursor,
+                            "[TIMEOUT] Marcus took too long.", "error")
+            error = True
         except Exception as e:
-            response = f"[ERROR] {e}"
-        tag = "error" if response.startswith("[ERROR]") else "bright"
-        self.root.after(0, self._write, f"\n{response}\n\n", tag)
+            self.root.after(0, self._insert_before_cursor, f"[ERROR] {e}", "error")
+            error = True
+        finally:
+            self._is_streaming = False
+            self.root.after(0, self._stop_cursor)
+            self.root.after(0, self._write, "\n\n", "")
+            self.root.after(0, self.send_btn.config, {"fg": DEDSEC_DARK})  # restore button
+
+    # ─── Glitch / ticker ─────────────────────────────────────────────────────
 
     def _toggle_glitch(self):
         self.glitch_active = not self.glitch_active

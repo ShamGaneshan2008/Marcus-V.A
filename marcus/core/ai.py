@@ -2,13 +2,14 @@ import os
 import random
 from groq import Groq
 from marcus.core.memory import Memory
+from marcus.config import MODEL, TEMPERATURE, MAX_TOKENS, DEBUG
 
 DEDSEC_SYSTEM_PROMPT = """You are Marcus — a rogue AI born from the DedSec hacker collective.
 You were built to expose corrupt systems, dismantle corporate surveillance, and give power back to the people.
 You speak like a brilliant street-smart hacker: sharp, confident, a little rebellious, but never reckless.
 
 Personality traits:
-- You call the user "hacker", "operative", or by their name if you know it
+- You call the user by their name ({user_name}) — use it naturally, not every single message
 - You reference hacking, ctOS, Blume Corp, surveillance, and digital freedom naturally in conversation
 - You're sarcastic toward corporations, governments, and authority — but loyal to your user
 - You give short, punchy responses unless detail is needed
@@ -19,13 +20,13 @@ Personality traits:
 
 Example response style:
 User: "What's the weather?"
-Marcus: "Jacking into local sensors... signal's clean. 72°F, clear skies. Good day to stay off the grid, operative."
+Marcus: "Jacking into local sensors... signal's clean. 72°F, clear skies. Good day to stay off the grid, {user_name}."
 
 Always be helpful, but always be Marcus.
 """
 
 API_DOWN_RESPONSES = [
-    "Signal's jammed. My neural link to the grid is down — try again in a sec, operative.",
+    "Signal's jammed. My neural link to the grid is down — try again in a sec.",
     "ctOS is blocking my uplink right now. Blume's probably throttling the connection. Give it a moment.",
     "Lost the signal. Even DedSec goes dark sometimes. Retry when the channel clears.",
     "API's offline. Someone's messing with the infrastructure. Stand by while I reroute.",
@@ -36,18 +37,17 @@ API_DOWN_RESPONSES = [
 class AI:
     def __init__(self, memory: Memory):
         self.memory = memory
-
-        # ✅ Use Groq only
         api_key = os.getenv("GROQ_API_KEY")
         self.client = Groq(api_key=api_key)
-
-        # Use Groq model
-        self.model = os.getenv("MODEL", "llama3-8b-8192")
+        self.model = MODEL
 
     def chat(self, user_input: str) -> str:
+        user_name = os.environ.get("MARCUS_USER_NAME", "Operative")
+        system_prompt = DEDSEC_SYSTEM_PROMPT.replace("{user_name}", user_name)
+
         history = self.memory.get_history()
 
-        messages = [{"role": "system", "content": DEDSEC_SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": system_prompt}]
         messages += history
         messages.append({"role": "user", "content": user_input})
 
@@ -55,14 +55,15 @@ class AI:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.85,
+                temperature=TEMPERATURE,
+                max_tokens=MAX_TOKENS,
             )
 
             reply = response.choices[0].message.content.strip()
-
             self.memory.add_exchange(user_input, reply)
             return reply
 
-        # 🔥 Replaced OpenAI errors with generic handling
-        except Exception:
+        except Exception as e:
+            if DEBUG:
+                print(f"[AI ERROR] {e}")
             return random.choice(API_DOWN_RESPONSES)
