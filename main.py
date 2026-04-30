@@ -15,7 +15,7 @@ load_dotenv()
 # memory.json can be [] (legacy) or {"user_name": "...", "events": [...]}.
 # These two functions handle both shapes transparently.
 
-MEMORY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory.json")
+MEMORY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "marcus/memory.json")
 
 def _load_raw() -> dict:
     """Return memory as a dict, upgrading the legacy [] format if needed."""

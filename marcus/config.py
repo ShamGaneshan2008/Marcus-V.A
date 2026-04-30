@@ -6,42 +6,61 @@ load_dotenv()
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 VOICE_ID = os.getenv("VOICE_ID")
 
-
+# ==============================
 # VOICE SETTINGS (TTS)
+# ==============================
 
-TTS_ENABLED = True        # Turn voice ON/OFF
-TTS_RATE = 170            # Speed of speech (default ~200)
-TTS_VOLUME = 1.0          # Volume (0.0 to 1.0)
-TTS_VOICE_INDEX = 0       # Change if multiple voices exist
+TTS_ENABLED = True
+TTS_RATE = 175
+TTS_VOLUME = 1.0
+TTS_VOICE_INDEX = 0
 
-#  ASSISTANT IDENTITY
+
+# ==============================
+# ASSISTANT IDENTITY
+# ==============================
+
 ASSISTANT_NAME = "Marcus"
-WAKE_WORD = "hey marcus"   # Used for voice activation
+WAKE_WORD = "hey marcus"
 
 
+# ==============================
 # AI MODEL SETTINGS
-MODEL = "llama3-8b-8192"   # Groq model (fast + free)
-TEMPERATURE = 0.85         # Creativity (0.0 = strict, 1.0 = creative)
-MAX_TOKENS = 1024          # Response length limit
+# ==============================
 
-#  MEMORY SETTINGS
+MODEL = os.getenv("MODEL", "openai/gpt-oss-120b")  # best on Groq right now
+TEMPERATURE = 0.75
+MAX_TOKENS = 1024
+
+
+# ==============================
+# MEMORY SETTINGS
+# ==============================
+
 MEMORY_ENABLED = True
-MAX_HISTORY = 10           # Number of past chats remembered
+MAX_HISTORY = 15  # exchanges kept in context
 
 
-
+# ==============================
 # FILE PATHS
+# ==============================
+
 DATA_DIR = "data"
 MEMORY_FILE = "data/memory.json"
 LOG_FILE = "data/logs/conversation.log"
 SHORTCUTS_FILE = "data/shortcuts.json"
 
 
+# ==============================
 # VOICE INPUT SETTINGS
-MIC_TIMEOUT = 5            # Seconds to wait for speech
-PHRASE_TIME_LIMIT = 10     # Max speaking duration
+# ==============================
+
+MIC_TIMEOUT = 5
+PHRASE_TIME_LIMIT = 10
 
 
+# ==============================
+# DEBUG MODE
+# ==============================
 
-#  DEBUG MODE
-DEBUG = True              # Prints extra logs in terminal
+DEBUG = True
