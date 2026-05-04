@@ -18,7 +18,7 @@ import json
 import os
 import re
 
-SHORTCUTS_FILE = os.path.join(os.path.dirname(__file__), "data", "shortcuts.json")
+SHORTCUTS_FILE = os.path.join(os.path.dirname(__file__), "../../data", "shortcuts.json")
 
 _DEFAULT_SHORTCUTS = {
     "open project":   "open PyCharm at D:/Marcus_V.A",

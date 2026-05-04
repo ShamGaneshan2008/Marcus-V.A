@@ -1,5 +1,5 @@
 # --- ENV (SECRETS) ---
-.env
+backend/.env
 .env.*
 
 # --- VIRTUAL ENV ---

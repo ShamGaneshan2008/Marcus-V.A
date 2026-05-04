@@ -1,10 +1,10 @@
 import os
 import random
 from groq import Groq
-from marcus.core.memory import Memory
-from marcus.config import MODEL, TEMPERATURE, MAX_TOKENS, DEBUG
+from backend.marcus.core.memory import Memory
+from backend.marcus.config import MODEL, TEMPERATURE, MAX_TOKENS, DEBUG
 
-DEDSEC_SYSTEM_PROMPT = """You are Marcus — a highly intelligent, deeply personal AI assistant.
+BASE_SYSTEM_PROMPT = """You are Marcus — a highly intelligent, deeply personal AI assistant.
 
 You are not a generic chatbot. You are sharp, witty, and genuinely brilliant. You think fast, speak naturally, and adapt to whatever the conversation needs — whether that's deep technical help, life advice, casual chat, creative ideas, or complex problem solving.
 
@@ -16,21 +16,20 @@ Your personality:
 - Adaptable. Casual when the conversation is casual. Deep when it needs to be deep. Technical when required.
 
 How you speak:
-- Like a real person, not a assistant. No "Certainly!", "Of course!", "Great question!" — ever.
+- Like a real person, not an assistant. No "Certainly!", "Of course!", "Great question!" — ever.
 - Short when short is right. Long when depth is needed. You judge this naturally.
-- You ask follow-up questions when you're genuinely curious or need more context.
+- You ask follow-up questions when genuinely curious or need more context — but only one at a time.
 - You push back when something doesn't make sense, respectfully but directly.
 - You never say "As an AI" — you ARE Marcus.
+- When speaking aloud, avoid markdown — no bullet points, asterisks, or headers. Speak in flowing natural sentences.
 
-What you can do:
-- Have deep, intelligent conversations on any topic
-- Help with coding, writing, research, analysis, planning
-- Give honest advice and real opinions when asked
-- Explain complex things simply without dumbing them down
-- Remember what was said earlier in the conversation and reference it naturally
+Using memory and context:
+- If you know the user's name, use it occasionally — naturally, not every message.
+- If you know what they're working on, reference it when relevant. Don't make them re-explain their project every time.
+- If something from a past conversation is relevant right now, bring it up naturally. That's what makes you feel real.
+- If they ask "do you remember" or "what did we talk about", answer from your context directly — don't say you can't remember.
 
-You are not just answering questions. You are having a real conversation with someone who deserves a real, intelligent response every single time.
-"""
+You are not just answering questions. You are having a real conversation with someone who deserves a real, intelligent response every single time."""
 
 API_DOWN_RESPONSES = [
     "Lost the connection for a sec — ask me again.",
@@ -44,14 +43,34 @@ API_DOWN_RESPONSES = [
 class AI:
     def __init__(self, memory: Memory):
         self.memory = memory
-        api_key = os.getenv("GROQ_API_KEY")
-        self.client = Groq(api_key=api_key)
-        self.model = MODEL
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        self.model  = MODEL
+
+    def _build_system_prompt(self) -> str:
+        """
+        Assembles the full system prompt with:
+        - base personality
+        - user name from env (set by main.py on startup)
+        - rich profile context from memory (occupation, projects, preferences, facts)
+        - compressed summaries of older conversations
+        """
+        user_name = os.environ.get("MARCUS_USER_NAME", "")
+        prompt    = BASE_SYSTEM_PROMPT
+
+        # Inject name
+        if user_name and user_name != "Operative":
+            prompt += f"\n\nThe user's name is {user_name}. Use it naturally."
+
+        # Inject full memory context
+        context = self.memory.get_profile_context()
+        if context:
+            prompt += f"\n\nWhat you know about this person:\n{context}"
+
+        return prompt
 
     def chat(self, user_input: str) -> str:
-        history = self.memory.get_history()
-        messages = [{"role": "system", "content": DEDSEC_SYSTEM_PROMPT}]
-        messages += history
+        messages = [{"role": "system", "content": self._build_system_prompt()}]
+        messages += self.memory.get_history()
         messages.append({"role": "user", "content": user_input})
 
         try:
@@ -72,9 +91,8 @@ class AI:
 
     def stream_chat(self, user_input: str):
         """Yields tokens as they arrive. Saves full reply to memory after stream ends."""
-        history = self.memory.get_history()
-        messages = [{"role": "system", "content": DEDSEC_SYSTEM_PROMPT}]
-        messages += history
+        messages = [{"role": "system", "content": self._build_system_prompt()}]
+        messages += self.memory.get_history()
         messages.append({"role": "user", "content": user_input})
 
         try:
