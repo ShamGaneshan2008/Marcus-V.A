@@ -18,6 +18,9 @@ import random
 import math
 from datetime import datetime
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_UI = os.path.abspath(os.path.join(_HERE, "..", "frontend", "ui.html"))
+
 # ──────────────────────────────────────────────
 #  THEME
 # ──────────────────────────────────────────────
