@@ -1,19 +1,27 @@
-# --- ENV (SECRETS) ---
-backend/.env
-.env.*
-
-# --- VIRTUAL ENV ---
-.venv/
-venv/
-
-# --- PYTHON ---
+# Python
 __pycache__/
 *.pyc
 *.pyo
 
-# --- LOGS ---
-*.log
+# Virtual env
+.venv/
+env/
 
-# --- OS ---
+# Build files
+build/
+dist/
+*.spec
+
+# Logs
+*.log
+build_log.txt
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Secrets
+.env
+
+# Outputs
+*.mp3
