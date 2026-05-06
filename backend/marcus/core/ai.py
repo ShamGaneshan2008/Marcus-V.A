@@ -43,7 +43,12 @@ API_DOWN_RESPONSES = [
 class AI:
     def __init__(self, memory: Memory):
         self.memory = memory
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        api_key = os.getenv("GROQ_API_KEY")
+
+        if not api_key:
+            raise ValueError("❌ GROQ_API_KEY is missing. Check your .env file.")
+
+        self.client = Groq(api_key=api_key)
         self.model  = MODEL
 
     def _build_system_prompt(self) -> str:
