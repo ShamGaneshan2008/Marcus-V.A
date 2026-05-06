@@ -25,3 +25,6 @@ Thumbs.db
 
 # Outputs
 *.mp3
+
+backend/data/*.json
+.firebase/
