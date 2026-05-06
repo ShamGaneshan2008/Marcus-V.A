@@ -3,14 +3,14 @@ import sys
 import json
 import threading
 from dotenv import load_dotenv
-from backend.marcus import AI
+from backend.marcus.core.ai import AI
 from backend.marcus.core.router import Router
 from backend.marcus.core.memory import Memory
 from backend.marcus.utils.speech import Speech
 
 load_dotenv()
 
-MEMORY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/memory.json")
+MEMORY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend/data/memory.json")
 
 
 def _load_raw() -> dict:

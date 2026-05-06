@@ -6,30 +6,27 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import webbrowser
 import sys
-import uvicorn
 
-
-# ── LOAD ENV ──────────────────────────────────────────────────────────────────
+# ── LOAD ENV ──────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 
 print("Loading .env from:", ENV_PATH)
 load_dotenv(dotenv_path=ENV_PATH)
-print("GROQ KEY:", os.getenv("GROQ_API_KEY"))
 
-# ── IMPORT MARCUS CORE ────────────────────────────────────────────────────────
+# ── IMPORT MARCUS CORE ────────────────────────────────────────────────
 from backend.marcus.core.ai import AI
 from backend.marcus.core.router import Router
 from backend.marcus.core.memory import Memory
 from backend.marcus.utils.speech import Speech
 
-# ── MEMORY PATH ───────────────────────────────────────────────────────────────
+# ── MEMORY PATH ───────────────────────────────────────────────────────
 MEMORY_PATH = BASE_DIR / "backend" / "data" / "memory.json"
 
 def _load_raw() -> dict:
@@ -45,13 +42,35 @@ def _load_raw() -> dict:
 def get_user_name() -> str:
     return _load_raw().get("user_name") or "Operative"
 
-# ── INIT COMPONENTS ───────────────────────────────────────────────────────────
+# ── GLOBALS ───────────────────────────────────────────────────────────
+current_websocket = None
+main_loop = None  # 🔥 IMPORTANT: shared loop for threads
+
+# ── SUBTITLE CALLBACK (FIXED) ─────────────────────────────────────────
+def subtitle_callback(text: str):
+    global current_websocket, main_loop
+
+    if not current_websocket or not main_loop:
+        return
+
+    try:
+        asyncio.run_coroutine_threadsafe(
+            current_websocket.send_json({
+                "type": "subtitle",
+                "text": text
+            }),
+            main_loop
+        )
+    except Exception as e:
+        print(f"[SUBTITLE ERROR] {e}")
+
+# ── INIT COMPONENTS ───────────────────────────────────────────────────
 memory = Memory()
-ai     = AI(memory)
-speech = Speech()
+ai = AI(memory)
+speech = Speech(subtitle_callback=subtitle_callback)
 router = Router(ai, memory, speech=speech)
 
-# ── FASTAPI APP ───────────────────────────────────────────────────────────────
+# ── FASTAPI APP ───────────────────────────────────────────────────────
 app = FastAPI()
 
 app.add_middleware(
@@ -61,43 +80,87 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── FRONTEND PATH ─────────────────────────────────────────────────────────────
+# ── SERVE FRONTEND ────────────────────────────────────────────────────
 if getattr(sys, 'frozen', False):
-    _BASE = Path(sys._MEIPASS)
+    BASE_DIR = Path(sys._MEIPASS)
 else:
-    _BASE = Path(__file__).resolve().parent
+    BASE_DIR = Path(__file__).resolve().parent
 
-FRONTEND_DIR = _BASE / "frontend"
-
-@app.get("/favicon.ico")
-def favicon():
-    icon_path = FRONTEND_DIR / "favicon.ico"
-    if icon_path.exists():
-        return FileResponse(icon_path)
-    return {"status": "no favicon"}
+FRONTEND_DIR = BASE_DIR / "frontend"
 
 @app.get("/")
 def home():
-    for name in ("ui.html", "index.html"):
-        path = FRONTEND_DIR / name
-        if path.exists():
-            return FileResponse(path)
-    raise RuntimeError(f"No frontend HTML found in {FRONTEND_DIR}")
+    path = FRONTEND_DIR / "index.html"
+    if not path.exists():
+        path = Path("frontend/index.html")
+    return FileResponse(path)
 
-# ── REST API ──────────────────────────────────────────────────────────────────
+@app.get("/favicon.ico")
+def favicon():
+    icon_path = os.path.join(FRONTEND_DIR, "favicon.ico")
+    if os.path.exists(icon_path):
+        return FileResponse(icon_path)
+    return {"status": "no favicon"}
+
+# ── REST CHAT ─────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     message: str
 
 @app.post("/chat")
 async def chat_rest(req: ChatRequest):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, router.handle, req.message)
     return {"response": result}
 
-# ── WEBSOCKET ─────────────────────────────────────────────────────────────────
+# ── TRANSCRIBE (FIXED) ────────────────────────────────────────────────
+@app.post("/transcribe")
+async def transcribe(audio: UploadFile = File(...)):
+    try:
+        import tempfile
+        from pydub import AudioSegment
+
+        contents = await audio.read()
+
+        # Save original file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        # Convert to WAV (important!)
+        wav_path = tmp_path + ".wav"
+        audio_segment = AudioSegment.from_file(tmp_path)
+        audio_segment.export(wav_path, format="wav")
+
+        from groq import Groq
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+        with open(wav_path, "rb") as f:
+            result = client.audio.transcriptions.create(
+                model="whisper-large-v3-turbo",
+                file=("audio.wav", f),
+                response_format="text"
+            )
+
+        transcript = result if isinstance(result, str) else result.text
+
+        os.unlink(tmp_path)
+        os.unlink(wav_path)
+
+        return JSONResponse({"transcript": transcript.strip()})
+
+    except Exception as e:
+        print(f"[TRANSCRIBE ERROR] {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# ── WEBSOCKET ─────────────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    global current_websocket, main_loop
+
     await websocket.accept()
+    current_websocket = websocket
+    main_loop = asyncio.get_running_loop()  # 🔥 STORE LOOP
+
     user_name = get_user_name()
 
     await websocket.send_json({
@@ -118,22 +181,23 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 await websocket.send_json({"type": "thinking"})
 
-                # Call handle_stream directly — returns lazy generator, don't wrap in executor
-                result = router.handle_stream(text)
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, router.handle_stream, text)
 
                 if hasattr(result, '__iter__') and not isinstance(result, str):
                     full_response = ""
 
-                    # Consume the blocking Groq generator on a thread pool thread
-                    loop = asyncio.get_event_loop()
-                    tokens = await loop.run_in_executor(None, list, result)
-
-                    for token in tokens:
+                    for token in result:
                         full_response += token
-                        await websocket.send_json({"type": "token", "text": token})
-                        await websocket.send_json({"type": "subtitle", "text": token})
+                        await websocket.send_json({
+                            "type": "token",
+                            "text": token
+                        })
 
-                    await websocket.send_json({"type": "done", "text": full_response})
+                    await websocket.send_json({
+                        "type": "done",
+                        "text": full_response
+                    })
 
                     threading.Thread(
                         target=speech.speak,
@@ -142,35 +206,46 @@ async def websocket_endpoint(websocket: WebSocket):
                     ).start()
 
                 else:
-                    result_str = str(result)
-                    await websocket.send_json({"type": "response", "text": result_str})
-                    await websocket.send_json({"type": "subtitle", "text": result_str})
+                    await websocket.send_json({
+                        "type": "response",
+                        "text": str(result)
+                    })
 
                     threading.Thread(
                         target=speech.speak,
-                        args=(result_str,),
+                        args=(str(result),),
                         daemon=True
                     ).start()
 
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
 
+            elif msg_type == "clear_subtitle":
+                await websocket.send_json({"type": "clear_subtitle"})
+
     except WebSocketDisconnect:
         print("[MARCUS] UI disconnected.")
+        current_websocket = None
 
     except Exception as e:
         print(f"[MARCUS] WS error: {e}")
+        current_websocket = None
         try:
-            await websocket.send_json({"type": "error", "text": str(e)})
+            await websocket.send_json({
+                "type": "error",
+                "text": str(e)
+            })
         except Exception:
             pass
 
-
+# ── AUTO OPEN BROWSER ─────────────────────────────────────────────────
 def open_browser():
     webbrowser.open("http://127.0.0.1:8000")
 
 if __name__ == "__main__":
+    import uvicorn
     threading.Timer(2, open_browser).start()
+
     uvicorn.run(
         app,
         host="127.0.0.1",
@@ -178,3 +253,4 @@ if __name__ == "__main__":
         log_config=None,
         access_log=False
     )
+
